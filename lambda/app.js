@@ -23,10 +23,8 @@ exports.handler = (event, context, callback) => {
     }
     
     var response = {
-        'body': "ok",
         'statusCode': 200
     };
-      
     callback(null, response);
     
 };
