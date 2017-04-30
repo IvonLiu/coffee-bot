@@ -1,8 +1,9 @@
 var request = require('request');
 var PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+var FIREBASE_URL = 'https://coffee-bot-8ca6d.firebaseio.com';
 
 exports.handler = (event, context, callback) => {
-    
+
     var data = JSON.parse(event.body);
     console.log(event.body);
 
@@ -41,11 +42,64 @@ function receivedMessage(event) {
 
     console.log('Received message from ' + senderID + ': ' + messageText)
 
-    if (messageText) {
-        sendTextMessage(senderID, messageText);
-    } else if (messageAttachments) {
-        sendTextMessage(senderID, "Message with attachment received");
-    }
+    request({
+        uri: FIREBASE_URL + '/members.json',
+        method: 'GET'
+    }, function (error, response, body) {
+        if (!error && response.statusCode == 200) {
+            var data = JSON.parse(body);
+            var userKey = null;
+            for (key in data) {
+                if (data[key].id == senderID) {
+                    userKey = key;
+                    break;
+                }
+            }
+            if (userKey == null) {
+                addNewUser(senderID);
+            } else {
+                request({
+                    uri: FIREBASE_URL + '/members/' + userKey + '/current.json',
+                    method: 'GET'
+                }, function(error, response, body) {
+                    if (!error && response.statusCode == 200) {
+                        var data = JSON.parse(body);
+                        var recipients = [];
+                        for (key in data) {
+                            recipients.push(data[key]);
+                        }
+                        recipients.forEach(function(recipientId) {
+                            if (messageText) {
+                                sendTextMessage(recipientId, messageText);
+                            } else if (messageAttachments) {
+                                sendTextMessage(recipientId, "Message with attachment received");
+                            }
+                        });
+                    } else {
+                        console.log('Error getting current pairings for ' + senderID + ': ' + error);
+                    }
+                });
+            }
+        } else {
+            console.log('Error getting member data: ' + error);
+        }
+    });
+}
+
+function addNewUser(senderID) {
+    request({
+        uri: FIREBASE_URL + '/members.json',
+        method: 'POST',
+        json: {
+            id: senderID
+        }
+    }, function(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            sendTextMessage(senderID, 'Welcome to Coffee Chats! Please await your pairing!');
+        } else {
+            console.log('Error adding new user: ' + error);
+        }
+    });
 }
 
 function sendTextMessage(recipientId, messageText) {
